@@ -1,32 +1,29 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
-  * To change this template file, choose Tools | Templates
-   * and open the template in the editor.
-    */
-    
+package peertopeer;
 
-    import java.util.*;
+import java.util.*;
 import java.lang.*;
 import java.io.*;
 import java.net.*;
 
-import org.json.JSONObject;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONArray;
+import org.json.simple.parser.JSONParser;
     /**
      *
       * @author jeevarajendran
        */
 
+
 public class PeerClient {
 	
-	static int nodeId = 1002;
+	static String nodeId = "1002";
 	static Socket clientSoc = null;
 	static PrintWriter output = null;
+	
+	static HashMap<String,String> routingInfo = new HashMap<String,String>();
+	
 	public static void main(String[] args) 
-	{
-          
-		
-		
-			        
+	{	        
 	
 		try
 		{
@@ -54,8 +51,9 @@ public class PeerClient {
 						String boot_ip = br.readLine();
 						jsonobj.put("type","JOINING_NETWORK");
 						jsonobj.put("node_id",nodeId);
-						jsonobj.put("ip_address",boot_ip);
-						joinNetwork(jsonobj);
+						jsonobj.put("ip_address","134.226.58.160");
+						joinNetwork(jsonobj,boot_ip);
+						
 						break;
 					case 2:
 						System.out.println("CHAT\n---------");
@@ -72,7 +70,9 @@ public class PeerClient {
 						break;
 					case 5:			
 						System.out.println("LEAVE NETWORK\n---------");
-						leaveNetwork();
+						jsonobj.put("type","LEAVING_NETWORK");
+						jsonobj.put("node_id",nodeId);
+						leaveNetwork(jsonobj);
 						break;
 					default:
 						System.out.println("Default\n---------");
@@ -80,21 +80,7 @@ public class PeerClient {
 				}
 				
 				
-				/*String messagefromserver = null;
-				char[] checkpoint = new char[100];
-				int i=0;
-				int charread;
-				charread=bd.read();
-			
-				while(charread != 13)
-				{
-					checkpoint[i] = (char)charread;
-					charread=bd.read();
-					i++;
-				}
-
-				messagefromserver = new String(checkpoint);
-				System.out.println("Message from Server to you : "+messagefromserver+" \n");*/
+				
 			}
 		}
 		catch(Exception e)
@@ -103,7 +89,19 @@ public class PeerClient {
 		}
 	}
 
-	private static void leaveNetwork() {
+	private static void addToRouteTable(JSONArray routingInfoArray) {
+		// TODO Auto-generated method stub
+		Iterator<JSONObject> routingJsonIterator = routingInfoArray.iterator();
+		while(routingJsonIterator.hasNext())
+		{
+			JSONObject routingJson = routingJsonIterator.next();
+			routingInfo.put((String)routingJson.get("node_id"), (String)routingJson.get("ip_address"));
+		}
+		System.out.println("Current Routing Table in client\n -----------");
+		System.out.println(routingInfo);
+	}
+	
+	private static void leaveNetwork(JSONObject jsonobj) {
 		// TODO Auto-generated method stub
 		
 	}
@@ -124,14 +122,29 @@ public class PeerClient {
 		System.out.println(jsonObj);
 	}
 
-	private static void joinNetwork(JSONObject jsonObj) {
+	private static void joinNetwork(JSONObject jsonObj,String boot_ip) {
 		// TODO Auto-generated method stub
 		System.out.println(jsonObj);
 		try
 		{
-		clientSoc = new Socket(jsonObj.getString("ip_address"),8767);
-		output = new PrintWriter(clientSoc.getOutputStream(),true);
-		output.println(jsonObj);
+			
+			clientSoc = new Socket(boot_ip,8767);
+			BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+			output = new PrintWriter(clientSoc.getOutputStream(),true);
+			output.println(jsonObj);
+		
+			System.out.println("waiting for the server to write :");
+
+			String messagefromserver = bd.readLine();
+		
+			JSONParser jsonInputParser = new JSONParser();
+			JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
+	
+			System.out.println("Message from Server to you : "+jsonInputFromServer+" \n");
+			
+			JSONArray routingInfoArray = (JSONArray) jsonInputFromServer.get("route_table");
+		
+			addToRouteTable(routingInfoArray);
 		}
 		catch(Exception e)
 		{
