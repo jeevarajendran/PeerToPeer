@@ -101,8 +101,17 @@ public class PeerClient {
 		System.out.println(routingInfo);
 	}
 	
-	private static void leaveNetwork(JSONObject jsonobj) {
+	private static void leaveNetwork(JSONObject jsonObj) {
 		// TODO Auto-generated method stub
+		try
+		{
+			output = new PrintWriter(clientSoc.getOutputStream(),true);
+			output.println(jsonObj);
+		}
+		catch(Exception e)
+		{
+			
+		}
 		
 	}
 
@@ -127,9 +136,9 @@ public class PeerClient {
 		System.out.println(jsonObj);
 		try
 		{
-			
 			clientSoc = new Socket(boot_ip,8767);
 			BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+			
 			output = new PrintWriter(clientSoc.getOutputStream(),true);
 			output.println(jsonObj);
 		

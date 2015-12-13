@@ -15,16 +15,19 @@ import org.json.simple.JSONArray;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.JSONObject;
 
-public class PeerModule {
+public class PeerModule 
+{
 	
 	private ServerSocket serverSocket;
 	private static final ThreadPoolExecutor pool = (ThreadPoolExecutor)Executors.newFixedThreadPool(10);
-	private int clientId=0;
-	private int chatRoomNo=1000;
-	private int nodeId = 1001;
-	private String ip_address = "134.226.58.115";
+	private static int clientId=0;
+	private static int chatRoomNo=1000;
+	private static int nodeId = 1001;
+	private static String ip_address = "134.226.58.115";
+	private static Socket clientSoc = null;
+	private static PrintWriter output = null;
 
-	HashMap<String,String> routingInfo = new HashMap<String,String>();
+	static HashMap<String,String> routingInfo = new HashMap<String,String>();
 	
 	//constructor to initialize server socket
 	public PeerModule(ServerSocket serverSocket)
@@ -66,13 +69,13 @@ public class PeerModule {
 		addToRouteTable(jsonInput);
 	}
 	
-	private void sendRelay() {
-		// TODO Auto-generated method stub
+	private void sendRelay() 
+	{
 		System.out.println("Sending Relay Messages");
 	}
 
-	private void addToRouteTable(JSONObject jsonInput) {
-		// TODO Auto-generated method stub
+	private void addToRouteTable(JSONObject jsonInput) 
+	{
 		routingInfo.put((String)jsonInput.get("node_id"), (String)jsonInput.get("ip_address"));
 		System.out.println("Current Routing Table \n -----------");
 		System.out.println(routingInfo);
@@ -105,9 +108,11 @@ public class PeerModule {
 	}
 	
 	//hashcode method
-	public int hashCode(String str) {
+	public int hashCode(String str) 
+	{
 		  int hash = 0;
-		  for (int i = 0; i < str.length(); i++) {
+		  for (int i = 0; i < str.length(); i++)
+		  {
 		    hash = hash * 31 + str.charAt(i);
 		  }
 		  return Math.abs(hash);
@@ -249,63 +254,112 @@ public class PeerModule {
 		}
 		
 		//method to join the network
-		public void joinNetwork()
+		private static void addToRouteTable(JSONArray routingInfoArray) 
 		{
-			JSONObject joinJson = new JSONObject();
-			joinJson.put("type","JOINING-NETWORK");
-			System.out.println(joinJson);
+			Iterator<JSONObject> routingJsonIterator = routingInfoArray.iterator();
+			while(routingJsonIterator.hasNext())
+			{
+				JSONObject routingJson = routingJsonIterator.next();
+				routingInfo.put((String)routingJson.get("node_id"), (String)routingJson.get("ip_address"));
+			}
+			System.out.println("Current Routing Table in client\n -----------");
+			System.out.println(routingInfo);
 		}
-	
-		//method for the client to leave a network
-		public void leaveNetwork()
-		{
-	
-		}
-	
-		//method to chat/store message in a node
-		public void chat()
-		{
-	
-		}
-	
-		//method to get messages for set of tags
-		public void chatRetrieval()
-		{
-	
-		}
-	
-		//method to ping
-		public void ping()
-		{
 		
+		private static void leaveNetwork(JSONObject jsonObj) 
+		{
+			try
+			{
+				output = new PrintWriter(clientSoc.getOutputStream(),true);
+				output.println(jsonObj);
+			}
+			catch(Exception e)
+			{
+				
+			}
+			
 		}
 
+		private static void ping() 
+		{
+			
+		}
+
+		private static void chatRetrieval() 
+		{
+			
+		}
+
+		private static void chat(JSONObject jsonObj) 
+		{
+			System.out.println(jsonObj);
+		}
+
+		private static void joinNetwork(JSONObject jsonObj,String boot_ip) 
+		{
+			System.out.println(jsonObj);
+			try
+			{
+				clientSoc = new Socket(boot_ip,8767);
+				BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+				
+				output = new PrintWriter(clientSoc.getOutputStream(),true);
+				output.println(jsonObj);
+			
+				System.out.println("waiting for the server to write :");
+
+				String messagefromserver = bd.readLine();
+			
+				JSONParser jsonInputParser = new JSONParser();
+				JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
+		
+				System.out.println("Message from Server to you : "+jsonInputFromServer+" \n");
+				
+				JSONArray routingInfoArray = (JSONArray) jsonInputFromServer.get("route_table");
+			
+				addToRouteTable(routingInfoArray);
+			}
+			catch(Exception e)
+			{
+				
+			}
+			
+		}
 					
 		public void run()
 		{
 			try
 			{
-				int userInput;
-				do
+				while(true)
 				{
-					System.out.println("Your peer menu");
-					BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+					System.out.println("Enter your message to the server : ");
 					System.out.println("1. JOIN NETWORK");
 					System.out.println("2. CHAT");
 					System.out.println("3. CHAT RETRIEVAL");
 					System.out.println("4. PING");
 					System.out.println("5. LEAVE NETWORK");
-					userInput = Integer.parseInt(reader.readLine());
-					System.out.println("Your User Input : " + userInput);
-					switch(userInput)
+		        	InputStreamReader rd = new InputStreamReader(System.in);
+					BufferedReader br = new BufferedReader(rd);
+					
+					int temp = Integer.parseInt(br.readLine());
+					System.out.println(temp);
+					JSONObject jsonobj = new JSONObject();
+					switch(temp)
 					{
 						case 1:
 							System.out.println("JOIN NETWORK\n---------");
-							joinNetwork();
+							System.out.println("Enter the ip address of the bootstrap node");
+							String boot_ip = br.readLine();
+							jsonobj.put("type","JOINING_NETWORK");
+							jsonobj.put("node_id",nodeId);
+							jsonobj.put("ip_address","134.226.58.160");
+							joinNetwork(jsonobj,boot_ip);
+							
 							break;
 						case 2:
 							System.out.println("CHAT\n---------");
-							chat();
+							jsonobj.put("type","CHAT");
+							chat(jsonobj);
 							break;
 						case 3:
 							System.out.println("CHAT RETRIEVAL\n---------");
@@ -317,13 +371,15 @@ public class PeerModule {
 							break;
 						case 5:			
 							System.out.println("LEAVE NETWORK\n---------");
-							leaveNetwork();
+							jsonobj.put("type","LEAVING_NETWORK");
+							jsonobj.put("node_id",nodeId);
+							leaveNetwork(jsonobj);
 							break;
 						default:
 							System.out.println("Default\n---------");
 							break;
-					}
-				}while(userInput!=6);
+					}	
+				}
 			}
 			catch(Exception e)
 			{
