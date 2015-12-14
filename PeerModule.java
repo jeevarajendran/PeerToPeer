@@ -84,6 +84,7 @@ public class PeerModule
 	//method for the client to leave a network
 	public void leaveNetwork(JSONObject jsonInput)
 	{
+                System.out.println("Inside Leave Network function");
 		routingInfo.remove((String)jsonInput.get("node_id"));
 		System.out.println("Routing Table after removing the node\n -----------");
 		System.out.println(routingInfo);
@@ -141,15 +142,16 @@ public class PeerModule
 			JSONArray routingInfoArray = new JSONArray();
 			
 			Iterator it = routingInfo.entrySet().iterator();
-		    while (it.hasNext()) {
-		    	JSONObject routingEntries = new JSONObject();
-		        Map.Entry entry = (Map.Entry)it.next();
-		        routingEntries.put("node_id", entry.getKey());
-		        routingEntries.put("ip_address", entry.getValue());
-		        routingInfoArray.add(routingEntries);
-		    }
+                        while (it.hasNext()) 
+                        {
+                            JSONObject routingEntries = new JSONObject();
+                            Map.Entry entry = (Map.Entry)it.next();
+                            routingEntries.put("node_id", entry.getKey());
+                            routingEntries.put("ip_address", entry.getValue());
+                            routingInfoArray.add(routingEntries);
+                        }
 			
-		    routingJson.put("route_table",routingInfoArray);
+                        routingJson.put("route_table",routingInfoArray);
 			
 			System.out.println(routingJson);
 			
@@ -185,6 +187,10 @@ public class PeerModule
 			peerModule.joinNetwork(socket,jsonInput);
 		}
 		
+                public void leaveNetwork(JSONObject jsonInput)
+                {
+                     peerModule.leaveNetwork(jsonInput);
+                }
 	
 		@Override			
 		public void run()
@@ -209,7 +215,7 @@ public class PeerModule
 					{
 						joinNetwork(jsonInput);
 					}
-					else if(jsonString.startsWith("LEAVING_NETWORK")==true)
+					else if(jsonString.indexOf("LEAVING_NETWORK")!=-1)
 					{	
 						leaveNetwork(jsonInput);
 										                   
@@ -338,7 +344,7 @@ public class PeerModule
 					System.out.println("3. CHAT RETRIEVAL");
 					System.out.println("4. PING");
 					System.out.println("5. LEAVE NETWORK");
-		        	InputStreamReader rd = new InputStreamReader(System.in);
+                                	InputStreamReader rd = new InputStreamReader(System.in);
 					BufferedReader br = new BufferedReader(rd);
 					
 					int temp = Integer.parseInt(br.readLine());

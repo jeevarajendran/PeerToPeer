@@ -63,7 +63,7 @@ public class PeerClient {
 					case 3:
 						System.out.println("CHAT RETRIEVAL\n---------");
 						chatRetrieval();
-						break;
+                                                   break;
 					case 4:
 						System.out.println("PING\n---------");
 						ping();
@@ -105,6 +105,7 @@ public class PeerClient {
 		// TODO Auto-generated method stub
 		try
 		{
+                        System.out.println("In Leave Network of client");
 			output = new PrintWriter(clientSoc.getOutputStream(),true);
 			output.println(jsonObj);
 		}
