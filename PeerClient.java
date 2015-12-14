@@ -58,15 +58,25 @@ public class PeerClient {
 					case 2:
 						System.out.println("CHAT\n---------");
 						jsonobj.put("type","CHAT");
+						jsonobj.put("tag","Trinity");
+						jsonobj.put("text","Welcome to Trinity");
 						chat(jsonobj);
 						break;
 					case 3:
 						System.out.println("CHAT RETRIEVAL\n---------");
-						chatRetrieval();
-                                                   break;
+						jsonobj.put("type","CHAT_RETRIEVE");
+						jsonobj.put("tag","Trinity");
+						jsonobj.put("node_id",nodeId);
+						jsonobj.put("sender_id",nodeId);
+						chatRetrieve(jsonobj);
+						break;
 					case 4:
 						System.out.println("PING\n---------");
-						ping();
+						jsonobj.put("type","PING");
+						jsonobj.put("target_id",nodeId);
+						jsonobj.put("sender_id",nodeId);
+						jsonobj.put("ip_address","134.226.58.115");
+						ping(jsonobj);
 						break;
 					case 5:			
 						System.out.println("LEAVE NETWORK\n---------");
@@ -89,8 +99,57 @@ public class PeerClient {
 		}
 	}
 
-	private static void addToRouteTable(JSONArray routingInfoArray) {
-		// TODO Auto-generated method stub
+	private static void ping(JSONObject jsonObj) 
+	{
+		try
+		{
+			System.out.println("In ping of client");
+			BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+			
+			output = new PrintWriter(clientSoc.getOutputStream(),true);
+			output.println(jsonObj);
+			
+			String messagefromserver = bd.readLine();
+			
+			JSONParser jsonInputParser = new JSONParser();
+			JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
+	
+			System.out.println("Message from Server to you for PING: "+jsonInputFromServer+" \n");
+		}
+		catch(Exception e)
+		{
+			
+		}
+		
+	}
+
+	private static void chatRetrieve(JSONObject jsonObj) 
+	{
+		try
+		{
+			System.out.println("In Chat Retrieve of client");
+			BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+			output = new PrintWriter(clientSoc.getOutputStream(),true);
+			output.println(jsonObj);
+			
+			String messagefromserver = bd.readLine();
+			
+			JSONParser jsonInputParser = new JSONParser();
+			JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
+	
+			System.out.println("Message from Server to you for CHAT RETRIEVE: "+jsonInputFromServer+" \n");
+			
+			
+		}
+		catch(Exception e)
+		{
+			
+		}
+	}
+
+	private static void addToRouteTable(JSONArray routingInfoArray) 
+	{
+		
 		Iterator<JSONObject> routingJsonIterator = routingInfoArray.iterator();
 		while(routingJsonIterator.hasNext())
 		{
@@ -101,11 +160,11 @@ public class PeerClient {
 		System.out.println(routingInfo);
 	}
 	
-	private static void leaveNetwork(JSONObject jsonObj) {
-		// TODO Auto-generated method stub
+	private static void leaveNetwork(JSONObject jsonObj) 
+	{
 		try
 		{
-                        System.out.println("In Leave Network of client");
+            System.out.println("In Leave Network of client");
 			output = new PrintWriter(clientSoc.getOutputStream(),true);
 			output.println(jsonObj);
 		}
@@ -115,6 +174,33 @@ public class PeerClient {
 		}
 		
 	}
+
+	private static void chat(JSONObject jsonObj) 
+	{
+		try
+		{
+			System.out.println(jsonObj);
+			BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+			
+			output = new PrintWriter(clientSoc.getOutputStream(),true);
+			System.out.println("Before sending the json to peer module");
+			output.println(jsonObj);
+			
+			String messagefromserver = bd.readLine();
+			
+			JSONParser jsonInputParser = new JSONParser();
+			JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
+	
+			System.out.println("Message from Server to you for CHAT : "+jsonInputFromServer+" \n");
+			
+		}
+		catch(Exception e)
+		{
+			
+		}
+		
+	}
+
 
 	private static void ping() {
 		// TODO Auto-generated method stub
@@ -126,12 +212,7 @@ public class PeerClient {
 		
 	}
 
-	private static void chat(JSONObject jsonObj) {
-		// TODO Auto-generated method stub
-		
-		System.out.println(jsonObj);
-	}
-
+	
 	private static void joinNetwork(JSONObject jsonObj,String boot_ip) {
 		// TODO Auto-generated method stub
 		System.out.println(jsonObj);
