@@ -16,9 +16,10 @@ import org.json.simple.parser.JSONParser;
 
 public class PeerClient {
 	
-	static String nodeId = "1002";
+	static String nodeId = "1010";
 	static Socket clientSoc = null;
 	static PrintWriter output = null;
+	static String ipAddress = null;
 	
 	static HashMap<String,String> routingInfo = new HashMap<String,String>();
 	
@@ -27,10 +28,15 @@ public class PeerClient {
 	
 		try
 		{
+			String tag = null;
+			String text = null;
+			String boot_ip = null;
+			ipAddress = InetAddress.getLocalHost().getHostAddress().toString();
 			
 			//BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
 			while(true)
 			{
+				
 				System.out.println("Enter your message to the server : ");
 				System.out.println("1. JOIN NETWORK");
 				System.out.println("2. CHAT");
@@ -47,25 +53,31 @@ public class PeerClient {
 				{
 					case 1:
 						System.out.println("JOIN NETWORK\n---------");
-						System.out.println("Enter the ip address of the bootstrap node");
-						String boot_ip = br.readLine();
+						System.out.println("Enter IP of Bootstrap");
+						boot_ip = br.readLine();
 						jsonobj.put("type","JOINING_NETWORK");
 						jsonobj.put("node_id",nodeId);
-						jsonobj.put("ip_address","134.226.58.160");
+						jsonobj.put("ip_address", ipAddress);
 						joinNetwork(jsonobj,boot_ip);
 						
 						break;
 					case 2:
 						System.out.println("CHAT\n---------");
+						System.out.println("Enter TAG : ");
+						tag = br.readLine();
+						System.out.println("Enter TEXT : ");
+						text = br.readLine();
 						jsonobj.put("type","CHAT");
-						jsonobj.put("tag","Trinity");
-						jsonobj.put("text","Welcome to Trinity");
+						jsonobj.put("tag",tag);
+						jsonobj.put("text",text);
 						chat(jsonobj);
 						break;
 					case 3:
 						System.out.println("CHAT RETRIEVAL\n---------");
 						jsonobj.put("type","CHAT_RETRIEVE");
-						jsonobj.put("tag","Trinity");
+						System.out.println("Enter TAG to be retrieved: ");
+						tag = br.readLine();
+						jsonobj.put("tag",tag);
 						jsonobj.put("node_id",nodeId);
 						jsonobj.put("sender_id",nodeId);
 						chatRetrieve(jsonobj);
@@ -75,7 +87,7 @@ public class PeerClient {
 						jsonobj.put("type","PING");
 						jsonobj.put("target_id",nodeId);
 						jsonobj.put("sender_id",nodeId);
-						jsonobj.put("ip_address","134.226.58.115");
+						jsonobj.put("ip_address",ipAddress);
 						ping(jsonobj);
 						break;
 					case 5:			
@@ -85,12 +97,9 @@ public class PeerClient {
 						leaveNetwork(jsonobj);
 						break;
 					default:
-						System.out.println("Default\n---------");
+						System.out.println("Enter from 1 - 5\n---------");
 						break;
 				}
-				
-				
-				
 			}
 		}
 		catch(Exception e)
