@@ -5,6 +5,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.Executors;
@@ -22,8 +23,8 @@ public class PeerModule
 	private ServerSocket serverSocket;
 	private static final ThreadPoolExecutor pool = (ThreadPoolExecutor)Executors.newFixedThreadPool(10);
 	private static int peerId=0;
-	private static int nodeId = 1001;
-	private static String ip_address = "134.226.58.115";
+	private static String nodeId = "1001";
+	private static String ipAddress = null;
 	private static Socket clientSoc = null;
 	private static PrintWriter output = null;
 
@@ -42,15 +43,16 @@ public class PeerModule
 	{
 		try
 		{
+			ipAddress = InetAddress.getLocalHost().getHostAddress().toString();
 			while(true)
 			{	
 				if(pool.getActiveCount()<pool.getMaximumPoolSize())
 				{	
 					initializeRoutingTable();
-					System.out.println("Waiting for a client to get connected \n-------------------------------------");													
+					System.out.println("Waiting for CLIENT : \n-------------------------------------");													
 					Socket socket = serverSocket.accept();
 					peerId++;
-					System.out.println("Connected to a client\n-------------------------------------");
+					System.out.println("CLIENT Connected\n-------------------------------------");
 					PeerClient peerClient = new PeerClient(socket,this,peerId);
 					PeerModule.pool.execute(peerClient);
 				}
@@ -66,22 +68,23 @@ public class PeerModule
 	//method to initialize the intial routing table of this system
 	private void initializeRoutingTable() 
 	{
-		routingInfo.put("1002", "134.226.58.160");
-		routingInfo.put("1003", "134.226.58.161");
-		routingInfo.put("1004", "134.226.58.162");
+		routingInfo.put("1002", "134.226.58.133");
+		routingInfo.put("1003", "134.226.58.133");
+		routingInfo.put("1004", "134.226.58.133");
+		routingInfo.put("1009", "134.226.58.133");
 	}
 
 	//method to join the peer to the network
 	public void joinNetwork(Socket socket, JSONObject jsonInput)
 	{
-		sendRoutingInfo(socket);
-		sendRelay();
+		sendRoutingInfo(socket,jsonInput);
+		sendRelay(jsonInput);
 		addToRouteTable(jsonInput);
 	}
 	
 	
 	//method to send routing info to a joining node
-	public void sendRoutingInfo(Socket socket)
+	public void sendRoutingInfo(Socket socket, JSONObject jsonInput)
 	{
 		try
 		{
@@ -90,9 +93,9 @@ public class PeerModule
 			JSONArray routingInfoArray = new JSONArray();
 			
 			routingJson.put("type","ROUTING_INFO");
-			routingJson.put("gateway_id",this.nodeId);
-			routingJson.put("node_id","1002");
-			routingJson.put("ip_address",this.ip_address);
+			routingJson.put("gateway_id",nodeId);
+			routingJson.put("node_id",jsonInput.get("node_id"));
+			routingJson.put("ip_address",ipAddress);
 			
 			Iterator it = routingInfo.entrySet().iterator();
             while (it.hasNext()) 
@@ -114,9 +117,73 @@ public class PeerModule
 	}
 	
 	//method to send relay messages about peer joining
-	private void sendRelay() 
+	private void sendRelay(JSONObject jsonInput) 
 	{
 		System.out.println("Sending Relay Messages");
+		System.out.println("Find out numerically closest node from the routing table");
+		int nodeChecked = Integer.parseInt(jsonInput.get("node_id").toString());
+		
+		int nextNode = 0;
+		int closest = 0;
+		int intialDiff = 0;
+		int diff = 0;
+		String closestNode = null;
+		String closestIp = null;
+		
+		Iterator it = routingInfo.entrySet().iterator();
+		
+		if(it.hasNext())
+		{
+			Map.Entry entry = (Map.Entry)it.next();
+			nextNode = Integer.parseInt(entry.getKey().toString());
+			closestIp = (String) entry.getValue();
+			intialDiff = Math.abs(nextNode - nodeChecked);
+			closest = nextNode;
+		}
+		
+		while(it.hasNext())
+		{
+			Map.Entry entry = (Map.Entry)it.next();
+			nextNode = Integer.parseInt(entry.getKey().toString());
+			diff =  Math.abs(nextNode - nodeChecked);
+			if(diff<intialDiff)
+			{
+				closest = nextNode;
+				closestIp = (String) entry.getValue();
+				intialDiff = diff;
+			}
+		}
+		
+		System.out.println("CLOSEST NODE : " + closest);
+		
+		closestNode = Integer.toString(closest);
+		JSONObject jsonObj = new JSONObject();
+		jsonObj.put("type","JOINING_NETWORK_RELAY");
+		jsonObj.put("node_id",jsonInput.get("node_id"));
+		jsonObj.put("gateway_id",nodeId);
+		jsonObj.put("gateway_ip",ipAddress);
+		sendMessage(closestNode,closestIp,jsonObj);
+		
+	}
+	
+	private void sendMessage(String node, String ipAddress,JSONObject jsonObj)
+	{
+		System.out.println("I AM GOING TO SEND RELAY MESSAGE NOW");
+		try
+		{
+			clientSoc = new Socket(ipAddress,9999);
+			
+			System.out.println("SOCKET CONNECTED");
+			BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+		
+			output = new PrintWriter(clientSoc.getOutputStream(),true);
+			System.out.println("NOW _ _---------");
+			output.println(jsonObj);
+		}
+		catch(Exception e)
+		{
+			
+		}
 	}
 
 	//method to add current joining node to the routing table
@@ -149,18 +216,18 @@ public class PeerModule
         	System.out.println(entry.getKey());
         	System.out.println(entry.getValue());	
         }
-		sendACK(socket,tag);
+		sendACK(socket,tag,jsonInput);
 	}
 	
 	//method to send ACK for chat Message index
-	private void sendACK(Socket socket,String tag) 
+	private void sendACK(Socket socket,String tag,JSONObject jsonInput) 
 	{
 		try
 		{
 			PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
 			JSONObject ackJson = new JSONObject();
 			ackJson.put("type","ACK_CHAT");
-			ackJson.put("node_id","1002");
+			ackJson.put("node_id",jsonInput.get("node_id"));
 			ackJson.put("tag",tag);
 			output.println(ackJson);
 		}
@@ -197,7 +264,7 @@ public class PeerModule
 			JSONObject chatResponseJson = new JSONObject();
 			chatResponseJson.put("type","CHAT_RESPONSE");
 			chatResponseJson.put("tag",tag);
-			chatResponseJson.put("node_id","1002");
+			chatResponseJson.put("node_id",jsonInput.get("node_id"));
 			chatResponseJson.put("sender_id",nodeId);
 			for(int i=0;i<matchedTexts.length;i++)
 			{
@@ -223,8 +290,8 @@ public class PeerModule
 			PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
 			JSONObject pinAckJson = new JSONObject();
 			pinAckJson.put("type","ACK");
-			pinAckJson.put("node_id","1002");
-			pinAckJson.put("ip_address","134.226.58.115");
+			pinAckJson.put("node_id",jsonInput.get("node_id"));
+			pinAckJson.put("ip_address",ipAddress);
 			System.out.println(pinAckJson);
 			output.println(pinAckJson);
 		}
@@ -233,6 +300,58 @@ public class PeerModule
 			System.out.println("Exception in sendACK");
 		}
 	}
+	
+	//method to send routing info to gateway node
+	public void sendRoutingInfoToGateway(JSONObject jsonObj) 
+	{
+		try
+		{
+			System.out.println("I AM SENDING MY ROUTING INFO TO GATEWAY IN RETURN OF RELAY MESSAGE");
+			String gateway_ip = jsonObj.get("gateway_ip").toString();
+		
+			clientSoc = new Socket(gateway_ip,8767);
+			PrintWriter output = new PrintWriter(clientSoc.getOutputStream(),true);
+		
+			JSONObject routingJson = new JSONObject();
+			JSONArray routingInfoArray = new JSONArray();
+		
+			routingJson.put("type","ROUTING_INFO");
+			routingJson.put("gateway_id",nodeId);
+			routingJson.put("node_id",jsonObj.get("node_id"));
+			routingJson.put("ip_address",ipAddress);
+		
+			Iterator it = routingInfo.entrySet().iterator();
+			while (it.hasNext()) 
+			{
+				JSONObject routingEntries = new JSONObject();
+				Map.Entry entry = (Map.Entry)it.next();
+				routingEntries.put("node_id", entry.getKey());
+				routingEntries.put("ip_address", entry.getValue());
+				routingInfoArray.add(routingEntries);
+			}
+			routingJson.put("route_table",routingInfoArray);
+			System.out.println(routingJson);
+			output.println(routingJson);
+		}
+		catch(Exception e)
+		{
+			
+		}
+	}	
+	
+	//method to display routing info received
+		public void displayRoutingInfo(JSONObject jsonObj) 
+		{
+			try
+			{
+				System.out.println("I AM DSIPLAYING THE ROUTING INFO RECEIVED FROM A PEER NODE : I AM GATEWAY");
+				System.out.println(jsonObj);
+			}
+			catch(Exception e)
+			{
+				
+			}
+		}
 	
 	//hashcode method
 	public int hashCode(String str) 
@@ -283,10 +402,22 @@ public class PeerModule
         	peerModule.chatRetrieve(socket,jsonInput);
         }
         
-        void ping(JSONObject jsonInput) 
+        public void ping(JSONObject jsonInput) 
         {
         	peerModule.ping(socket,jsonInput);
         }
+        
+        public void sendRoutingInfoToGateway(JSONObject jsonInput) 
+        {
+        	peerModule.sendRoutingInfoToGateway(jsonInput);
+			
+		}
+        
+        public void displayRoutingInfo(JSONObject jsonInput) 
+        {
+        	peerModule.displayRoutingInfo(jsonInput);
+			
+		}
 	
 		@Override			
 		public void run()
@@ -303,9 +434,16 @@ public class PeerModule
 					JSONObject jsonInput  = (JSONObject) jsonInputParser.parse(input);
 					String jsonString = jsonInput.toJSONString();
 					
-					if(jsonString.indexOf("JOINING_NETWORK")!=-1)
+					if((jsonString.indexOf("JOINING_NETWORK")!=-1)&&((jsonString.indexOf("RELAY")==-1)))
 					{
 						joinNetwork(jsonInput);
+					}
+					else if(jsonString.indexOf("JOINING_NETWORK_RELAY")!=-1)
+					{	
+						System.out.println("I GOT YOUR RELAY MESSAGE MY SERVER .. THANK you!");
+						sendRoutingInfoToGateway(jsonInput);
+						//sendToNextSystemInTheLoop
+						sendRelay(jsonInput);
 					}
 					else if(jsonString.indexOf("LEAVING_NETWORK")!=-1)
 					{	
@@ -324,6 +462,11 @@ public class PeerModule
 					{
 						ping(jsonInput);
 					}
+					else if(jsonString.indexOf("ROUTING_INFO")!=-1)
+					{
+						
+						displayRoutingInfo(jsonInput);
+					}
 					else
 					{
 						//do nothing		
@@ -335,6 +478,8 @@ public class PeerModule
 				System.out.println(e);
 			}
 		}
+
+		
 
 	}
 	//******************* - PEER CLIENT - END ********************
@@ -470,10 +615,16 @@ public class PeerModule
 		public void run()
 		{
 			try
-			{	
+			{
+				String tag = null;
+				String text = null;
+				String boot_ip = null;
+				ipAddress = InetAddress.getLocalHost().getHostAddress().toString();
+				
 				//BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
 				while(true)
 				{
+					
 					System.out.println("Enter your message to the server : ");
 					System.out.println("1. JOIN NETWORK");
 					System.out.println("2. CHAT");
@@ -490,24 +641,31 @@ public class PeerModule
 					{
 						case 1:
 							System.out.println("JOIN NETWORK\n---------");
-							System.out.println("Enter the ip address of the bootstrap node");
-							String boot_ip = br.readLine();
+							System.out.println("Enter IP of Bootstrap");
+							boot_ip = br.readLine();
 							jsonobj.put("type","JOINING_NETWORK");
 							jsonobj.put("node_id",nodeId);
-							jsonobj.put("ip_address","134.226.58.160");
+							jsonobj.put("ip_address", ipAddress);
 							joinNetwork(jsonobj,boot_ip);
+							
 							break;
 						case 2:
 							System.out.println("CHAT\n---------");
+							System.out.println("Enter TAG : ");
+							tag = br.readLine();
+							System.out.println("Enter TEXT : ");
+							text = br.readLine();
 							jsonobj.put("type","CHAT");
-							jsonobj.put("tag","Trinity");
-							jsonobj.put("text","Welcome to Trinity");
+							jsonobj.put("tag",tag);
+							jsonobj.put("text",text);
 							chat(jsonobj);
 							break;
 						case 3:
 							System.out.println("CHAT RETRIEVAL\n---------");
 							jsonobj.put("type","CHAT_RETRIEVE");
-							jsonobj.put("tag","Trinity");
+							System.out.println("Enter TAG to be retrieved: ");
+							tag = br.readLine();
+							jsonobj.put("tag",tag);
 							jsonobj.put("node_id",nodeId);
 							jsonobj.put("sender_id",nodeId);
 							chatRetrieve(jsonobj);
@@ -517,7 +675,7 @@ public class PeerModule
 							jsonobj.put("type","PING");
 							jsonobj.put("target_id",nodeId);
 							jsonobj.put("sender_id",nodeId);
-							jsonobj.put("ip_address","134.226.58.115");
+							jsonobj.put("ip_address",ipAddress);
 							ping(jsonobj);
 							break;
 						case 5:			
@@ -527,7 +685,7 @@ public class PeerModule
 							leaveNetwork(jsonobj);
 							break;
 						default:
-							System.out.println("Default\n---------");
+							System.out.println("Enter from 1 - 5\n---------");
 							break;
 					}
 				}
@@ -547,6 +705,8 @@ public class PeerModule
 		ThisPeer tp = new ThisPeer(pm);
 		(new Thread(tp)).start();
 		pm.init();		   
-	}	
+	}
+
+	
 
 }
