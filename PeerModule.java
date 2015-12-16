@@ -23,10 +23,11 @@ public class PeerModule
 	private ServerSocket serverSocket;
 	private static final ThreadPoolExecutor pool = (ThreadPoolExecutor)Executors.newFixedThreadPool(10);
 	private static int peerId=0;
-	private static String nodeId = "1001";
+	private static String nodeId = "1002";
 	private static String ipAddress = null;
 	private static Socket clientSoc = null;
 	private static PrintWriter output = null;
+	PeerClient peerClient = null;
 
 	static HashMap<String,String> routingInfo = new HashMap<String,String>();
 	MultiValueMap chatMessages = new MultiValueMap();
@@ -53,7 +54,7 @@ public class PeerModule
 					Socket socket = serverSocket.accept();
 					peerId++;
 					System.out.println("CLIENT Connected\n-------------------------------------");
-					PeerClient peerClient = new PeerClient(socket,this,peerId);
+					peerClient = new PeerClient(socket,this,peerId);
 					PeerModule.pool.execute(peerClient);
 				}
 				
@@ -68,15 +69,16 @@ public class PeerModule
 	//method to initialize the intial routing table of this system
 	private void initializeRoutingTable() 
 	{
-		routingInfo.put("1002", "134.226.58.133");
-		routingInfo.put("1003", "134.226.58.133");
-		routingInfo.put("1004", "134.226.58.133");
-		routingInfo.put("1009", "134.226.58.133");
+		routingInfo.put("1003", "134.226.58.160");
+		routingInfo.put("7003", "134.226.58.160");
+		routingInfo.put("7004", "134.226.58.160");
+		routingInfo.put("7005", "134.226.58.160");
 	}
 
 	//method to join the peer to the network
-	public void joinNetwork(Socket socket, JSONObject jsonInput)
+	public void joinNetwork(JSONObject jsonInput)
 	{
+		Socket socket = peerClient.socket;
 		sendRoutingInfo(socket,jsonInput);
 		sendRelay(jsonInput);
 		addToRouteTable(jsonInput);
@@ -122,31 +124,22 @@ public class PeerModule
 		System.out.println("Sending Relay Messages");
 		System.out.println("Find out numerically closest node from the routing table");
 		int nodeChecked = Integer.parseInt(jsonInput.get("node_id").toString());
+		int intialDiff = Math.abs(Integer.parseInt(nodeId) - nodeChecked);
 		
 		int nextNode = 0;
-		int closest = 0;
-		int intialDiff = 0;
+		int closest = Integer.parseInt(nodeId);
 		int diff = 0;
-		String closestNode = null;
-		String closestIp = null;
+		String closestNode = nodeId;
+		String closestIp = ipAddress;
 		
 		Iterator it = routingInfo.entrySet().iterator();
-		
-		if(it.hasNext())
-		{
-			Map.Entry entry = (Map.Entry)it.next();
-			nextNode = Integer.parseInt(entry.getKey().toString());
-			closestIp = (String) entry.getValue();
-			intialDiff = Math.abs(nextNode - nodeChecked);
-			closest = nextNode;
-		}
 		
 		while(it.hasNext())
 		{
 			Map.Entry entry = (Map.Entry)it.next();
 			nextNode = Integer.parseInt(entry.getKey().toString());
 			diff =  Math.abs(nextNode - nodeChecked);
-			if(diff<intialDiff)
+			if((diff<intialDiff))
 			{
 				closest = nextNode;
 				closestIp = (String) entry.getValue();
@@ -157,28 +150,50 @@ public class PeerModule
 		System.out.println("CLOSEST NODE : " + closest);
 		
 		closestNode = Integer.toString(closest);
-		JSONObject jsonObj = new JSONObject();
-		jsonObj.put("type","JOINING_NETWORK_RELAY");
-		jsonObj.put("node_id",jsonInput.get("node_id"));
-		jsonObj.put("gateway_id",nodeId);
-		jsonObj.put("gateway_ip",ipAddress);
-		sendMessage(closestNode,closestIp,jsonObj);
+		if(!closestNode.equals(nodeId))
+		{
+			JSONObject jsonObj = new JSONObject();
+			jsonObj.put("type","JOINING_NETWORK_RELAY");
+			jsonObj.put("node_id",jsonInput.get("node_id"));
+			if(jsonInput.containsKey("gateway_id"))
+			{
+				jsonObj.put("gateway_id",jsonInput.get("gateway_id"));
+			}
+			else
+			{
+				jsonObj.put("gateway_id",nodeId);
+			}
+			if(jsonInput.containsKey("gateway_ip"))
+			{
+				jsonObj.put("gateway_ip",jsonInput.get("gateway_ip"));
+			}
+			else
+			{
+				jsonObj.put("gateway_ip",ipAddress);
+			}
+			sendMessage(closestNode,closestIp,9999,jsonObj);
+		}
+		else
+		{
+			System.out.println("I DONT HAVE ANY OTHER CLOSER NODE TO THE TARGET . DONE!!!!");
+		}
+		
 		
 	}
 	
-	private void sendMessage(String node, String ipAddress,JSONObject jsonObj)
+	private void sendMessage(String node, String ipAddress,int port,JSONObject jsonObj)
 	{
-		System.out.println("I AM GOING TO SEND RELAY MESSAGE NOW");
 		try
 		{
-			clientSoc = new Socket(ipAddress,9999);
+			clientSoc = new Socket(ipAddress,port);
 			
 			System.out.println("SOCKET CONNECTED");
 			BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
 		
 			output = new PrintWriter(clientSoc.getOutputStream(),true);
-			System.out.println("NOW _ _---------");
+			System.out.println("NOW---------" + jsonObj);
 			output.println(jsonObj);
+			System.out.println("SENT MESSAGE");
 		}
 		catch(Exception e)
 		{
@@ -189,8 +204,22 @@ public class PeerModule
 	//method to add current joining node to the routing table
 	private void addToRouteTable(JSONObject jsonInput) 
 	{
-		routingInfo.put((String)jsonInput.get("node_id"), (String)jsonInput.get("ip_address"));
-		System.out.println("Current Routing Table \n -----------");
+		if(jsonInput.get("type").equals("JOINING_NETWORK"))
+		{
+			routingInfo.put((String)jsonInput.get("node_id"), (String)jsonInput.get("ip_address"));
+		}
+		else if(jsonInput.get("type").equals("ROUTING_INFO"))
+		{
+			JSONArray routingInfoArray = (JSONArray) jsonInput.get("route_table");
+			Iterator<JSONObject> routingJsonIterator = routingInfoArray.iterator();
+			while(routingJsonIterator.hasNext())
+			{
+				JSONObject routingJson = routingJsonIterator.next();
+				routingInfo.put((String)routingJson.get("node_id"), (String)routingJson.get("ip_address"));
+			}
+		}
+		
+		System.out.println("UPDATED THE ROUTING TABLE\n -----------");
 		System.out.println(routingInfo);
 	}
 
@@ -203,33 +232,101 @@ public class PeerModule
 	}
 	
 	//method to store the chat message from the peer
-	public void chat(Socket socket,JSONObject jsonInput)
-	{
-		String tag = (String)jsonInput.get("tag");
-		String text = (String)jsonInput.get("text");
-        chatMessages.put(tag, text);
- 
-        Iterator it = chatMessages.entrySet().iterator();
-        while(it.hasNext()) 
-        {
-        	Map.Entry entry = (Map.Entry)it.next();
-        	System.out.println(entry.getKey());
-        	System.out.println(entry.getValue());	
-        }
-		sendACK(socket,tag,jsonInput);
-	}
-	
-	//method to send ACK for chat Message index
-	private void sendACK(Socket socket,String tag,JSONObject jsonInput) 
+	public void chat(JSONObject jsonInput)
 	{
 		try
 		{
-			PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
+		if(jsonInput.get("target_id").equals(nodeId))
+		{
+			String tag = (String)jsonInput.get("tag");
+			String text = (String)jsonInput.get("text");
+			chatMessages.put(tag, text);
+			
+			Iterator it = chatMessages.entrySet().iterator();
+			while(it.hasNext()) 
+			{
+				Map.Entry entry = (Map.Entry)it.next();
+				System.out.println(entry.getKey());
+				System.out.println(entry.getValue());	
+			}
+			sendACK(tag,jsonInput);
+		}
+		else
+		{
+			System.out.println(jsonInput);
+			int nodeChecked = Integer.parseInt(jsonInput.get("target_id").toString());
+			
+			if(routingInfo.containsKey(jsonInput.get("target_id")))
+			{
+				System.out.println("I have the node to be messaged in my routing table");
+				String target_ip = routingInfo.get(jsonInput.get("target_id"));
+				sendMessage(jsonInput.get("target_id").toString(),target_ip,5555,jsonInput);
+			}
+			else
+			{
+				int intialDiff = Math.abs(Integer.parseInt(nodeId) - nodeChecked);
+				int nextNode = 0;
+				int closest = Integer.parseInt(nodeId);
+				int diff = 0;
+				String closestNode = nodeId;
+				String closestIp = ipAddress;
+			
+				Iterator it = routingInfo.entrySet().iterator();
+			
+				while(it.hasNext())
+				{
+					Map.Entry entry = (Map.Entry)it.next();
+					nextNode = Integer.parseInt(entry.getKey().toString());
+					diff =  Math.abs(nextNode - nodeChecked);
+					if((diff<intialDiff))
+					{
+						closest = nextNode;
+						closestIp = (String) entry.getValue();
+						intialDiff = diff;
+					}
+				}
+			
+				System.out.println("CLOSEST NODE : " + closest);
+				
+				closestNode = Integer.toString(closest);
+				if(!closestNode.equals(nodeId))
+				{
+					sendMessage(closestNode,closestIp,9999,jsonInput);
+				}
+				else
+				{
+					System.out.println("I DONT HAVE ANY OTHER CLOSER NODE TO THE TARGET . DONE!!!!");
+				}
+			/*BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+			output = new PrintWriter(clientSoc.getOutputStream(),true);
+			output.println(jsonObj);
+			String messagefromserver = bd.readLine();
+			
+			JSONParser jsonInputParser = new JSONParser();
+			JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
+	
+			System.out.println("Message from Server to you for CHAT : "+jsonInputFromServer+" \n");*/
+			}
+		
+		}
+		}
+		catch(Exception e)
+		{
+			
+		}
+	}
+	
+	//method to send ACK for chat Message index
+	private void sendACK(String tag,JSONObject jsonInput) 
+	{
+		try
+		{
+			//PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
 			JSONObject ackJson = new JSONObject();
 			ackJson.put("type","ACK_CHAT");
 			ackJson.put("node_id",jsonInput.get("node_id"));
 			ackJson.put("tag",tag);
-			output.println(ackJson);
+			sendMessage(jsonInput.get("sender_id").toString(),peerClient.socket.getLocalAddress().toString(),9999,ackJson);
 		}
 		catch(Exception e)
 		{
@@ -238,49 +335,200 @@ public class PeerModule
 	}
 
 	//method to retrieve the chat message from a peer and send chat response to a peer
-	public void chatRetrieve(Socket socket,JSONObject jsonInput)
+	public void chatRetrieve(JSONObject jsonInput)
 	{
 		try
 		{
-			String tag = (String) jsonInput.get("tag");
-			PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
-			String matchedTag = "";
-			String textString = "";
-			JSONArray matchedTextsArray = new JSONArray();
+		if(jsonInput.get("target_id").equals(nodeId))
+		{
+			formChatResponse(jsonInput);
+		}
+		else
+		{
+			System.out.println(jsonInput);
+			int nodeChecked = Integer.parseInt(jsonInput.get("target_id").toString());
 			
-			Iterator it = chatMessages.entrySet().iterator();
-			while(it.hasNext()) 
+			if(routingInfo.containsKey(jsonInput.get("target_id")))
 			{
-				Map.Entry entry = (Map.Entry)it.next();
-				if(entry.getKey().equals(tag))
+				System.out.println("I have the node to be messaged in my routing table");
+				String target_ip = routingInfo.get(jsonInput.get("target_id"));
+				sendMessage(jsonInput.get("target_id").toString(),target_ip,5555,jsonInput);
+			}
+			else
+			{
+				int intialDiff = Math.abs(Integer.parseInt(nodeId) - nodeChecked);
+				int nextNode = 0;
+				int closest = Integer.parseInt(nodeId);
+				int diff = 0;
+				String closestNode = nodeId;
+				String closestIp = ipAddress;
+			
+				Iterator it = routingInfo.entrySet().iterator();
+			
+				while(it.hasNext())
 				{
-					matchedTag = (String) entry.getKey();
-					String tempString = entry.getValue().toString();
-					textString = tempString.substring(1, tempString.length()-1);
+					Map.Entry entry = (Map.Entry)it.next();
+					nextNode = Integer.parseInt(entry.getKey().toString());
+					diff =  Math.abs(nextNode - nodeChecked);
+					if((diff<intialDiff))
+					{
+						closest = nextNode;
+						closestIp = (String) entry.getValue();
+						intialDiff = diff;
+					}
 				}
-			}
 			
-			String[] matchedTexts = textString.split(",");
-			JSONObject chatResponseJson = new JSONObject();
-			chatResponseJson.put("type","CHAT_RESPONSE");
-			chatResponseJson.put("tag",tag);
-			chatResponseJson.put("node_id",jsonInput.get("node_id"));
-			chatResponseJson.put("sender_id",nodeId);
-			for(int i=0;i<matchedTexts.length;i++)
-			{
-				JSONObject tempJson = new JSONObject();
-				tempJson.put("text", matchedTexts[i]);
-				matchedTextsArray.add(tempJson);
+				System.out.println("CLOSEST NODE : " + closest);
+				
+				closestNode = Integer.toString(closest);
+				if(!closestNode.equals(nodeId))
+				{
+					sendMessage(closestNode,closestIp,9999,jsonInput);
+				}
+				else
+				{
+					System.out.println("I DONT HAVE ANY OTHER CLOSER NODE TO THE TARGET . DONE!!!!");
+				}
+			/*BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+			output = new PrintWriter(clientSoc.getOutputStream(),true);
+			output.println(jsonObj);
+			String messagefromserver = bd.readLine();
+			
+			JSONParser jsonInputParser = new JSONParser();
+			JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
+	
+			System.out.println("Message from Server to you for CHAT : "+jsonInputFromServer+" \n");*/
 			}
-			chatResponseJson.put("response",matchedTextsArray);
-			System.out.println(chatResponseJson);
-			output.println(chatResponseJson);
+		
+		}
+		}
+		catch(Exception e)
+		{
+			
+		}
+	
+	}
+	
+	//method to send chat response
+	public void formChatResponse(JSONObject jsonInput)
+	{
+		try
+		{
+				String tag = (String) jsonInput.get("tag");
+				//PrintWriter output = new PrintWriter(socket.getOutputStream(),true);
+				String matchedTag = "";
+				String textString = "";
+				JSONArray matchedTextsArray = new JSONArray();
+				
+				Iterator it = chatMessages.entrySet().iterator();
+				while(it.hasNext()) 
+				{
+					Map.Entry entry = (Map.Entry)it.next();
+					if(entry.getKey().equals(tag))
+					{
+						matchedTag = (String) entry.getKey();
+						String tempString = entry.getValue().toString();
+						textString = tempString.substring(1, tempString.length()-1);
+					}
+				}
+				
+				String[] matchedTexts = textString.split(",");
+				JSONObject chatResponseJson = new JSONObject();
+				chatResponseJson.put("type","CHAT_RESPONSE");
+				chatResponseJson.put("tag",tag);
+				chatResponseJson.put("node_id",jsonInput.get("node_id"));
+				chatResponseJson.put("sender_id",jsonInput.get("node_id"));
+				for(int i=0;i<matchedTexts.length;i++)
+				{
+					JSONObject tempJson = new JSONObject();
+					tempJson.put("text", matchedTexts[i]);
+					matchedTextsArray.add(tempJson);
+				}
+				chatResponseJson.put("response",matchedTextsArray);
+				System.out.println(chatResponseJson);
+				handleChatResponse(chatResponseJson);
+				//output.println(chatResponseJson);
+			
 		}
 		catch(Exception e)
 		{
 			System.out.println("Exception in chatRetrieve");
 		}
 	}
+	
+	//method to handle chat response
+	public void handleChatResponse(JSONObject jsonInput)
+	{
+			try
+			{
+				if(jsonInput.get("sender_id").equals(nodeId))
+				{
+					System.out.println("HURRAH .. I GOT THE RESPONSE BACK");
+				}
+				else
+				{
+					System.out.println(jsonInput);
+					int nodeChecked = Integer.parseInt(jsonInput.get("target_id").toString());
+					
+					if(routingInfo.containsKey(jsonInput.get("target_id")))
+					{
+						System.out.println("I have the node to be messaged in my routing table");
+						String target_ip = routingInfo.get(jsonInput.get("target_id"));
+						sendMessage(jsonInput.get("target_id").toString(),target_ip,5555,jsonInput);
+					}
+					else
+					{
+						int intialDiff = Math.abs(Integer.parseInt(nodeId) - nodeChecked);
+						int nextNode = 0;
+						int closest = Integer.parseInt(nodeId);
+						int diff = 0;
+						String closestNode = nodeId;
+						String closestIp = ipAddress;
+					
+						Iterator it = routingInfo.entrySet().iterator();
+					
+						while(it.hasNext())
+						{
+							Map.Entry entry = (Map.Entry)it.next();
+							nextNode = Integer.parseInt(entry.getKey().toString());
+							diff =  Math.abs(nextNode - nodeChecked);
+							if((diff<intialDiff))
+							{
+								closest = nextNode;
+								closestIp = (String) entry.getValue();
+								intialDiff = diff;
+							}
+						}
+					
+						System.out.println("CLOSEST NODE : " + closest);
+						
+						closestNode = Integer.toString(closest);
+						if(!closestNode.equals(nodeId))
+						{
+							sendMessage(closestNode,closestIp,9999,jsonInput);
+						}
+						else
+						{
+							System.out.println("I DONT HAVE ANY OTHER CLOSER NODE TO THE TARGET . DONE!!!!");
+						}
+					/*BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
+					output = new PrintWriter(clientSoc.getOutputStream(),true);
+					output.println(jsonObj);
+					String messagefromserver = bd.readLine();
+					
+					JSONParser jsonInputParser = new JSONParser();
+					JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
+			
+					System.out.println("Message from Server to you for CHAT : "+jsonInputFromServer+" \n");*/
+					}
+				}
+			}
+			catch(Exception e)
+			{
+				System.out.println("Exception in chatRetrieve");
+			}
+	}
+	
 	
 	//method to acknowledge for ping message
 	public void ping(Socket socket,JSONObject jsonInput)
@@ -308,7 +556,7 @@ public class PeerModule
 		{
 			System.out.println("I AM SENDING MY ROUTING INFO TO GATEWAY IN RETURN OF RELAY MESSAGE");
 			String gateway_ip = jsonObj.get("gateway_ip").toString();
-		
+			
 			clientSoc = new Socket(gateway_ip,8767);
 			PrintWriter output = new PrintWriter(clientSoc.getOutputStream(),true);
 		
@@ -316,7 +564,7 @@ public class PeerModule
 			JSONArray routingInfoArray = new JSONArray();
 		
 			routingJson.put("type","ROUTING_INFO");
-			routingJson.put("gateway_id",nodeId);
+			routingJson.put("gateway_id",jsonObj.get("gateway_id"));
 			routingJson.put("node_id",jsonObj.get("node_id"));
 			routingJson.put("ip_address",ipAddress);
 		
@@ -353,6 +601,38 @@ public class PeerModule
 			}
 		}
 	
+	//method to send routing info received from a relay node back to joining node
+	public void sendRoutingInfoToJoinNode(JSONObject jsonObj)
+	{
+		try
+		{
+			System.out.println("I AM GATEWAY. I AM SENDING THE ROUTING INFO TO JOINING NODE");
+			if(routingInfo.containsKey(jsonObj.get("node_id")))
+			{
+				System.out.println("JOINING NODE IS AVAILABLE IN MY ROUTING TABLE");
+				Iterator it = routingInfo.entrySet().iterator();
+				while (it.hasNext()) 
+				{
+					JSONObject routingEntries = new JSONObject();
+					Map.Entry entry = (Map.Entry)it.next();
+					//routingEntries.put("node_id", entry.getKey());
+					//routingEntries.put("ip_address", entry.getValue());
+					//routingInfoArray.add(routingEntries);
+					if(entry.getKey().equals(jsonObj.get("node_id")))
+					{
+						sendMessage(entry.getKey().toString(),entry.getValue().toString(),7777,jsonObj);
+					}
+				}
+				
+			}
+			
+		}
+		catch(Exception e)
+		{
+			
+		}
+	}
+	
 	//hashcode method
 	public int hashCode(String str) 
 	{
@@ -384,7 +664,7 @@ public class PeerModule
 		//method to join the network
 		public void joinNetwork(JSONObject jsonInput)
 		{
-			peerModule.joinNetwork(socket,jsonInput);
+			peerModule.joinNetwork(jsonInput);
 		}
 		
         public void leaveNetwork(JSONObject jsonInput)
@@ -394,12 +674,12 @@ public class PeerModule
         
         public void chat(JSONObject jsonInput)
         {
-        	peerModule.chat(socket,jsonInput);
+        	peerModule.chat(jsonInput);
         }
         
         public void chatRetrieve(JSONObject jsonInput)
         {
-        	peerModule.chatRetrieve(socket,jsonInput);
+        	peerModule.chatRetrieve(jsonInput);
         }
         
         public void ping(JSONObject jsonInput) 
@@ -418,6 +698,16 @@ public class PeerModule
         	peerModule.displayRoutingInfo(jsonInput);
 			
 		}
+        
+        public void sendRoutingInfoToJoinNode(JSONObject jsonInput)
+        {
+        	peerModule.sendRoutingInfoToJoinNode(jsonInput);
+        }
+        
+        public void addToRouteTable(JSONObject jsonInput)
+        {
+        	peerModule.addToRouteTable(jsonInput);
+        }
 	
 		@Override			
 		public void run()
@@ -436,6 +726,7 @@ public class PeerModule
 					
 					if((jsonString.indexOf("JOINING_NETWORK")!=-1)&&((jsonString.indexOf("RELAY")==-1)))
 					{
+						//System.out.println(csocket.getRemoteSocketAddress().toString());
 						joinNetwork(jsonInput);
 					}
 					else if(jsonString.indexOf("JOINING_NETWORK_RELAY")!=-1)
@@ -458,14 +749,26 @@ public class PeerModule
 					{
 						chatRetrieve(jsonInput);
 					}
+					else if(jsonString.indexOf("CHAT_RESPONSE")!=-1)
+					{
+						handleChatResponse(jsonInput);
+					}
 					else if(jsonString.indexOf("PING")!=-1)
 					{
 						ping(jsonInput);
 					}
 					else if(jsonString.indexOf("ROUTING_INFO")!=-1)
 					{
-						
-						displayRoutingInfo(jsonInput);
+						if(nodeId.equals(jsonInput.get("gateway_id")))
+						{
+							displayRoutingInfo(jsonInput);
+							sendRoutingInfoToJoinNode(jsonInput);
+						}
+						else if(nodeId.equals(jsonInput.get("node_id")))
+						{
+							System.out.println("I am TARGET . I AM GOING TO UPDATE MY ROUTING TABLE WITH THE INFO");
+							addToRouteTable(jsonInput);
+						}
 					}
 					else
 					{
@@ -487,16 +790,16 @@ public class PeerModule
 	//######################## - THIS NODE - ########################
 	public static class ThisPeer implements Runnable
 	{
-		PeerModule thisPeerModule;
+		static PeerModule thisPeerModule;
 				
 		ThisPeer(PeerModule peerModule)
 		{
 			this.thisPeerModule = peerModule;
 		}
 		
-		private static void joinNetwork(JSONObject jsonObj,String boot_ip) 
+		private void joinNetwork(JSONObject jsonObj,String boot_ip) 
 		{
-			System.out.println(jsonObj);
+			/*System.out.println(jsonObj);
 			try
 			{
 				clientSoc = new Socket(boot_ip,8767);
@@ -515,81 +818,36 @@ public class PeerModule
 			catch(Exception e)
 			{
 				
-			}
-		}
-		
-		private static void addToRouteTable(JSONArray routingInfoArray) 
-		{
+			}*/
 			
-			Iterator<JSONObject> routingJsonIterator = routingInfoArray.iterator();
-			while(routingJsonIterator.hasNext())
-			{
-				JSONObject routingJson = routingJsonIterator.next();
-				routingInfo.put((String)routingJson.get("node_id"), (String)routingJson.get("ip_address"));
-			}
-			System.out.println("Current Routing Table in client\n -----------");
-			System.out.println(routingInfo);
+			thisPeerModule.joinNetwork(jsonObj);
 		}
 		
-		private static void leaveNetwork(JSONObject jsonObj) 
+		private void addToRouteTable(JSONArray routingInfoArray) 
 		{
-			try
-			{
-	            System.out.println("In Leave Network of client");
-				output = new PrintWriter(clientSoc.getOutputStream(),true);
-				output.println(jsonObj);
-			}
-			catch(Exception e)
-			{
-				
-			}
+			thisPeerModule.addToRouteTable(jsonInput);
 		}
 		
-		private static void chat(JSONObject jsonObj) 
+		private void leaveNetwork(JSONObject jsonObj) 
 		{
-			try
-			{
-				System.out.println(jsonObj);
-				BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
-				output = new PrintWriter(clientSoc.getOutputStream(),true);
-				output.println(jsonObj);
-				String messagefromserver = bd.readLine();
-				
-				JSONParser jsonInputParser = new JSONParser();
-				JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
-		
-				System.out.println("Message from Server to you for CHAT : "+jsonInputFromServer+" \n");
-			}
-			catch(Exception e)
-			{
-				
-			}
-			
+			thisPeerModule.leaveNetwork(jsonObj);
 		}
 		
-		private static void chatRetrieve(JSONObject jsonObj) 
+		public void sendMessage(String node, String ipAddress,int port,JSONObject jsonObj)
 		{
-			try
-			{
-				System.out.println("In Chat Retrieve of client");
-				BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
-				output = new PrintWriter(clientSoc.getOutputStream(),true);
-				output.println(jsonObj);
-				
-				String messagefromserver = bd.readLine();
-				
-				JSONParser jsonInputParser = new JSONParser();
-				JSONObject jsonInputFromServer = (JSONObject) jsonInputParser.parse(messagefromserver);
-		
-				System.out.println("Message from Server to you for CHAT RETRIEVE: "+jsonInputFromServer+" \n");
-			}
-			catch(Exception e)
-			{
-				
-			}
+			thisPeerModule.sendMessage(node, ipAddress, port, jsonObj);
+		}
+		private void chat(JSONObject jsonObj) 
+		{
+			thisPeerModule.chat(jsonObj);	
 		}
 		
-		private static void ping(JSONObject jsonObj) 
+		private void chatRetrieve(JSONObject jsonObj) 
+		{
+			thisPeerModule.chatRetrieve(jsonObj);
+		}
+		
+		private void ping(JSONObject jsonObj) 
 		{
 			try
 			{
@@ -619,6 +877,7 @@ public class PeerModule
 				String tag = null;
 				String text = null;
 				String boot_ip = null;
+				String targetNodeId = null;
 				ipAddress = InetAddress.getLocalHost().getHostAddress().toString();
 				
 				//BufferedReader bd = new BufferedReader(new InputStreamReader(clientSoc.getInputStream()));
@@ -647,7 +906,6 @@ public class PeerModule
 							jsonobj.put("node_id",nodeId);
 							jsonobj.put("ip_address", ipAddress);
 							joinNetwork(jsonobj,boot_ip);
-							
 							break;
 						case 2:
 							System.out.println("CHAT\n---------");
@@ -655,9 +913,13 @@ public class PeerModule
 							tag = br.readLine();
 							System.out.println("Enter TEXT : ");
 							text = br.readLine();
+							System.out.println("Enter TARGET NODE ID : ");
+							targetNodeId = br.readLine();
 							jsonobj.put("type","CHAT");
 							jsonobj.put("tag",tag);
 							jsonobj.put("text",text);
+							jsonobj.put("target_id",targetNodeId);
+							jsonobj.put("sender_id",nodeId);
 							chat(jsonobj);
 							break;
 						case 3:
@@ -665,8 +927,10 @@ public class PeerModule
 							jsonobj.put("type","CHAT_RETRIEVE");
 							System.out.println("Enter TAG to be retrieved: ");
 							tag = br.readLine();
+							System.out.println("Enter TARGET NODE ID : ");
+							targetNodeId = br.readLine();
 							jsonobj.put("tag",tag);
-							jsonobj.put("node_id",nodeId);
+							jsonobj.put("node_id",targetNodeId);
 							jsonobj.put("sender_id",nodeId);
 							chatRetrieve(jsonobj);
 							break;
