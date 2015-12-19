@@ -23,7 +23,7 @@ public class PeerModule
 	private ServerSocket serverSocket;
 	private static final ThreadPoolExecutor pool = (ThreadPoolExecutor)Executors.newFixedThreadPool(10);
 	private static int peerId=0;
-	private static String nodeId = "1001";
+	private static String nodeId = "448";
 	private static String ipAddress = null;
 	private static Socket clientSoc = null;
 	private static PrintWriter output = null;
@@ -95,7 +95,7 @@ public class PeerModule
 	//method to initialize the initial routing table of this node
 	private void initializeRoutingTable() 
 	{
-		routingInfo.put("1001", "134.226.58.133");
+		routingInfo.put("448", "192.168.0.16");
 		routingInfo.put("8003", "999.999.999.999");
 		routingInfo.put("8004", "888.888.888.888");
 		routingInfo.put("8005", "777.777.777.777");
@@ -646,12 +646,12 @@ public class PeerModule
 	}
 	
 	//hashcode method
-	public int hashCode(String str) 
+	public static int hashCode(String str) 
 	{
 		  int hash = 0;
 		  for (int i = 0; i < str.length(); i++)
 		  {
-		    hash = hash * 31 + str.charAt(i);
+		    hash = hash * 1 + str.charAt(i);
 		  }
 		  return Math.abs(hash);
 	}
@@ -856,6 +856,11 @@ public class PeerModule
 		{
 			thisPeerModule.ping(jsonObj);
 		}	
+		
+		private int hashCode(String str)
+		{
+			return thisPeerModule.hashCode(str);
+		}
 					
 		public void run()
 		{
@@ -899,8 +904,9 @@ public class PeerModule
 							tag = br.readLine();
 							System.out.println("Enter TEXT : ");
 							text = br.readLine();
-							System.out.println("Enter TARGET NODE ID : ");
-							targetNodeId = br.readLine();
+							/*System.out.println("Enter TARGET NODE ID : ");
+							targetNodeId = br.readLine();*/
+							targetNodeId = Integer.toString(hashCode(tag));
 							jsonobj.put("type","CHAT");
 							jsonobj.put("tag",tag);
 							jsonobj.put("text",text);
@@ -913,8 +919,9 @@ public class PeerModule
 							jsonobj.put("type","CHAT_RETRIEVE");
 							System.out.println("Enter TAG to be retrieved: ");
 							tag = br.readLine();
-							System.out.println("Enter TARGET NODE ID : ");
-							targetNodeId = br.readLine();
+							/*System.out.println("Enter TARGET NODE ID : ");
+							targetNodeId = br.readLine();*/
+							targetNodeId = Integer.toString(hashCode(tag));
 							jsonobj.put("tag",tag);
 							jsonobj.put("node_id",targetNodeId);
 							jsonobj.put("sender_id",nodeId);
@@ -956,7 +963,7 @@ public class PeerModule
 		PeerModule pm = new PeerModule(new ServerSocket(8767));	
 		ThisPeer tp = new ThisPeer(pm);
 		(new Thread(tp)).start();
-		pm.init();		   
+		pm.init();
 	}
 
 }
